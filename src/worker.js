@@ -78,7 +78,7 @@ async function generateSpeech(text) {
     postMessage({ type: 'progress', progress: 10, message: 'Converting text to phonemes...' });
 
     // Convert text to phoneme IDs
-    const phonemeIds = textToPhonemeIds(text, modelConfig);
+    const phonemeIds = await textToPhonemeIds(text, modelConfig);
 
     postMessage({ type: 'progress', progress: 30, message: 'Running inference...' });
 
