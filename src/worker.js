@@ -36,31 +36,31 @@ async function initModel(providedBaseUrl) {
 
   const modelUrl = `${baseUrl}models/en_US-lessac-medium.onnx`;
 
-  // Try WebGPU first, fallback to WASM
   try {
     // Configure ONNX Runtime WASM paths
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.0/dist/';
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/';
+    ort.env.wasm.numThreads = 1;
 
-    try {
-      // Try WebGPU first
-      session = await ort.InferenceSession.create(modelUrl, {
-        executionProviders: ['webgpu'],
-        graphOptimizationLevel: 'all',
-      });
-      backend = 'webgpu';
-    } catch (webgpuErr) {
-      console.warn('WebGPU not available, falling back to WASM:', webgpuErr);
-
-      // Fallback to WASM
-      session = await ort.InferenceSession.create(modelUrl, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all',
-      });
-      backend = 'wasm';
+    // Fetch model as ArrayBuffer
+    postMessage({ type: 'status', status: 'loading', message: 'Downloading model...' });
+    const modelResponse = await fetch(modelUrl);
+    if (!modelResponse.ok) {
+      throw new Error(`Failed to fetch model: ${modelResponse.status}`);
     }
+    const modelBuffer = await modelResponse.arrayBuffer();
+
+    postMessage({ type: 'status', status: 'loading', message: 'Initializing inference session...' });
+
+    // Create session with WASM backend (WebGPU is still experimental)
+    session = await ort.InferenceSession.create(modelBuffer, {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+    });
+    backend = 'wasm';
 
     postMessage({ type: 'status', status: 'ready', backend });
   } catch (err) {
+    console.error('Model load error:', err);
     postMessage({
       type: 'error',
       message: `Failed to load model. Make sure the .onnx file is in public/models/. Error: ${err.message}`
