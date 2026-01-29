@@ -45,8 +45,11 @@ function initWorker() {
     setStatus('error', `Worker error: ${err.message}`);
   };
 
+  // Calculate base URL for model files
+  const baseUrl = import.meta.env.BASE_URL || '/';
+
   // Start loading the model
-  worker.postMessage({ type: 'init' });
+  worker.postMessage({ type: 'init', baseUrl });
 }
 
 function handleStatus(data) {

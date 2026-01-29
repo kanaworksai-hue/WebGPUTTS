@@ -4,13 +4,11 @@ import { textToPhonemeIds, initPhonemizerData } from './phonemizer.js';
 let session = null;
 let modelConfig = null;
 let backend = 'unknown';
+let baseUrl = '';
 
-// Get the base URL for assets
-const BASE_URL = self.location.href.includes('/src/')
-  ? new URL('..', self.location.href).href
-  : new URL('.', self.location.href).href;
-
-async function initModel() {
+async function initModel(providedBaseUrl) {
+  // Use provided base URL from main thread
+  baseUrl = providedBaseUrl || '';
   postMessage({ type: 'status', status: 'loading', message: 'Loading phonemizer data...' });
 
   // Initialize phonemizer lookup tables
@@ -19,7 +17,7 @@ async function initModel() {
   postMessage({ type: 'status', status: 'loading', message: 'Loading model configuration...' });
 
   // Load model config
-  const configUrl = new URL('models/en_US-lessac-medium.onnx.json', BASE_URL).href;
+  const configUrl = `${baseUrl}models/en_US-lessac-medium.onnx.json`;
   try {
     const configResponse = await fetch(configUrl);
     if (!configResponse.ok) {
@@ -36,7 +34,7 @@ async function initModel() {
 
   postMessage({ type: 'status', status: 'loading', message: 'Loading ONNX model...' });
 
-  const modelUrl = new URL('models/en_US-lessac-medium.onnx', BASE_URL).href;
+  const modelUrl = `${baseUrl}models/en_US-lessac-medium.onnx`;
 
   // Try WebGPU first, fallback to WASM
   try {
@@ -143,7 +141,7 @@ self.onmessage = async (e) => {
 
   switch (type) {
     case 'init':
-      await initModel();
+      await initModel(data.baseUrl);
       break;
     case 'generate':
       await generateSpeech(data.text);
