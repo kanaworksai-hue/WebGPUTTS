@@ -1,130 +1,551 @@
 /**
- * Simple phonemizer for Piper TTS
+ * Phonemizer for Piper TTS using espeak-ng IPA phonemes
  *
- * This is a simplified rule-based phonemizer for English text.
- * For production use, consider using espeak-ng WASM for more accurate results.
+ * This provides English text-to-phoneme conversion compatible with Piper models.
  */
 
-// Piper phoneme symbols - these map to the model's vocabulary
-// The IDs come from the model's config phoneme_id_map
-let PHONEME_ID_MAP = null;
-
-// Special tokens
-const PAD = '_';
-const BOS = '^';
-const EOS = '$';
-
-/**
- * Initialize phonemizer data from model config or defaults
- */
-export async function initPhonemizerData() {
-  // Default phoneme map matching Piper's espeak-ng output
-  // This will be overwritten by the model config if available
-  PHONEME_ID_MAP = {
-    '_': 0, '^': 1, '$': 2,
-    ' ': 3, '!': 4, "'": 5, '(': 6, ')': 7, ',': 8, '-': 9, '.': 10, ':': 11, ';': 12, '?': 13,
-    'a': 14, 'b': 15, 'c': 16, 'd': 17, 'e': 18, 'f': 19, 'g': 20, 'h': 21, 'i': 22, 'j': 23,
-    'k': 24, 'l': 25, 'm': 26, 'n': 27, 'o': 28, 'p': 29, 'q': 30, 'r': 31, 's': 32, 't': 33,
-    'u': 34, 'v': 35, 'w': 36, 'x': 37, 'y': 38, 'z': 39,
-    'æ': 40, 'ç': 41, 'ð': 42, 'ø': 43, 'ŋ': 44, 'œ': 45, 'ɐ': 46, 'ɑ': 47, 'ɒ': 48, 'ɔ': 49,
-    'ə': 50, 'ɚ': 51, 'ɛ': 52, 'ɜ': 53, 'ɡ': 54, 'ɪ': 55, 'ɬ': 56, 'ɹ': 57, 'ɾ': 58, 'ʃ': 59,
-    'ʊ': 60, 'ʌ': 61, 'ʒ': 62, 'ˈ': 63, 'ˌ': 64, 'ː': 65, '̃': 66, '̩': 67, 'θ': 68, 'ᵻ': 69,
-  };
-}
-
-/**
- * Basic English grapheme-to-phoneme rules
- * This is a simplified approximation - real Piper uses espeak-ng
- */
-const G2P_RULES = {
-  // Common words with irregular pronunciation
-  'the': 'ðə',
+// Comprehensive pronunciation dictionary using espeak-ng IPA format
+// Format: word -> IPA phoneme string
+const LEXICON = {
+  // Articles & Determiners
   'a': 'ə',
   'an': 'æn',
-  'is': 'ɪz',
-  'are': 'ɑːɹ',
-  'was': 'wɒz',
-  'were': 'wɜːɹ',
-  'have': 'hæv',
-  'has': 'hæz',
-  'had': 'hæd',
-  'do': 'duː',
-  'does': 'dʌz',
-  'did': 'dɪd',
-  'will': 'wɪl',
-  'would': 'wʊd',
-  'could': 'kʊd',
-  'should': 'ʃʊd',
-  'can': 'kæn',
-  'may': 'meɪ',
-  'might': 'maɪt',
-  'must': 'mʌst',
-  'shall': 'ʃæl',
-  'to': 'tuː',
-  'of': 'ɒv',
-  'in': 'ɪn',
-  'for': 'fɔːɹ',
-  'on': 'ɒn',
-  'with': 'wɪð',
-  'at': 'æt',
-  'by': 'baɪ',
-  'from': 'fɹɒm',
-  'or': 'ɔːɹ',
-  'and': 'ænd',
-  'but': 'bʌt',
-  'not': 'nɒt',
-  'you': 'juː',
+  'the': 'ðə',
   'this': 'ðɪs',
   'that': 'ðæt',
-  'it': 'ɪt',
-  'he': 'hiː',
-  'she': 'ʃiː',
-  'we': 'wiː',
-  'they': 'ðeɪ',
+  'these': 'ðiːz',
+  'those': 'ðoʊz',
+  'some': 'sʌm',
+  'any': 'ɛni',
+  'no': 'noʊ',
+  'every': 'ɛvɹi',
+  'each': 'iːtʃ',
+  'all': 'ɔːl',
+  'both': 'boʊθ',
+  'few': 'fjuː',
+  'many': 'mɛni',
+  'much': 'mʌtʃ',
+  'other': 'ʌðɚ',
+  'another': 'ənʌðɚ',
+
+  // Pronouns
   'i': 'aɪ',
   'me': 'miː',
   'my': 'maɪ',
+  'mine': 'maɪn',
+  'myself': 'maɪsɛlf',
+  'you': 'juː',
   'your': 'jɔːɹ',
+  'yours': 'jɔːɹz',
+  'yourself': 'jɔːɹsɛlf',
+  'he': 'hiː',
+  'him': 'hɪm',
   'his': 'hɪz',
+  'himself': 'hɪmsɛlf',
+  'she': 'ʃiː',
   'her': 'hɜːɹ',
+  'hers': 'hɜːɹz',
+  'herself': 'hɜːɹsɛlf',
+  'it': 'ɪt',
+  'its': 'ɪts',
+  'itself': 'ɪtsɛlf',
+  'we': 'wiː',
+  'us': 'ʌs',
   'our': 'aʊɹ',
-  'their': 'ðeɹ',
-  'what': 'wɒt',
-  'which': 'wɪtʃ',
+  'ours': 'aʊɹz',
+  'ourselves': 'aʊɹsɛlvz',
+  'they': 'ðeɪ',
+  'them': 'ðɛm',
+  'their': 'ðɛɹ',
+  'theirs': 'ðɛɹz',
+  'themselves': 'ðɛmsɛlvz',
   'who': 'huː',
-  'how': 'haʊ',
-  'when': 'wen',
-  'where': 'weɹ',
+  'whom': 'huːm',
+  'whose': 'huːz',
+  'what': 'wɑːt',
+  'which': 'wɪtʃ',
+  'where': 'wɛɹ',
+  'when': 'wɛn',
   'why': 'waɪ',
-  'hello': 'həˈloʊ',
+  'how': 'haʊ',
+
+  // Common verbs - be
+  'be': 'biː',
+  'am': 'æm',
+  'is': 'ɪz',
+  'are': 'ɑːɹ',
+  'was': 'wɑːz',
+  'were': 'wɜːɹ',
+  'been': 'bɪn',
+  'being': 'biːɪŋ',
+
+  // Common verbs - have
+  'have': 'hæv',
+  'has': 'hæz',
+  'had': 'hæd',
+  'having': 'hævɪŋ',
+
+  // Common verbs - do
+  'do': 'duː',
+  'does': 'dʌz',
+  'did': 'dɪd',
+  'done': 'dʌn',
+  'doing': 'duːɪŋ',
+
+  // Modal verbs
+  'will': 'wɪl',
+  'would': 'wʊd',
+  'shall': 'ʃæl',
+  'should': 'ʃʊd',
+  'can': 'kæn',
+  'could': 'kʊd',
+  'may': 'meɪ',
+  'might': 'maɪt',
+  'must': 'mʌst',
+
+  // Common verbs
+  'go': 'ɡoʊ',
+  'goes': 'ɡoʊz',
+  'went': 'wɛnt',
+  'gone': 'ɡɔːn',
+  'going': 'ɡoʊɪŋ',
+  'come': 'kʌm',
+  'comes': 'kʌmz',
+  'came': 'keɪm',
+  'coming': 'kʌmɪŋ',
+  'get': 'ɡɛt',
+  'gets': 'ɡɛts',
+  'got': 'ɡɑːt',
+  'getting': 'ɡɛtɪŋ',
+  'make': 'meɪk',
+  'makes': 'meɪks',
+  'made': 'meɪd',
+  'making': 'meɪkɪŋ',
+  'know': 'noʊ',
+  'knows': 'noʊz',
+  'knew': 'nuː',
+  'known': 'noʊn',
+  'knowing': 'noʊɪŋ',
+  'think': 'θɪŋk',
+  'thinks': 'θɪŋks',
+  'thought': 'θɔːt',
+  'thinking': 'θɪŋkɪŋ',
+  'take': 'teɪk',
+  'takes': 'teɪks',
+  'took': 'tʊk',
+  'taken': 'teɪkən',
+  'taking': 'teɪkɪŋ',
+  'see': 'siː',
+  'sees': 'siːz',
+  'saw': 'sɔː',
+  'seen': 'siːn',
+  'seeing': 'siːɪŋ',
+  'want': 'wɑːnt',
+  'wants': 'wɑːnts',
+  'wanted': 'wɑːntɪd',
+  'wanting': 'wɑːntɪŋ',
+  'use': 'juːz',
+  'uses': 'juːzɪz',
+  'used': 'juːzd',
+  'using': 'juːzɪŋ',
+  'find': 'faɪnd',
+  'finds': 'faɪndz',
+  'found': 'faʊnd',
+  'finding': 'faɪndɪŋ',
+  'give': 'ɡɪv',
+  'gives': 'ɡɪvz',
+  'gave': 'ɡeɪv',
+  'given': 'ɡɪvən',
+  'giving': 'ɡɪvɪŋ',
+  'tell': 'tɛl',
+  'tells': 'tɛlz',
+  'told': 'toʊld',
+  'telling': 'tɛlɪŋ',
+  'say': 'seɪ',
+  'says': 'sɛz',
+  'said': 'sɛd',
+  'saying': 'seɪɪŋ',
+  'work': 'wɜːɹk',
+  'works': 'wɜːɹks',
+  'worked': 'wɜːɹkt',
+  'working': 'wɜːɹkɪŋ',
+  'call': 'kɔːl',
+  'calls': 'kɔːlz',
+  'called': 'kɔːld',
+  'calling': 'kɔːlɪŋ',
+  'try': 'tɹaɪ',
+  'tries': 'tɹaɪz',
+  'tried': 'tɹaɪd',
+  'trying': 'tɹaɪɪŋ',
+  'ask': 'æsk',
+  'asks': 'æsks',
+  'asked': 'æskt',
+  'asking': 'æskɪŋ',
+  'need': 'niːd',
+  'needs': 'niːdz',
+  'needed': 'niːdɪd',
+  'needing': 'niːdɪŋ',
+  'feel': 'fiːl',
+  'feels': 'fiːlz',
+  'felt': 'fɛlt',
+  'feeling': 'fiːlɪŋ',
+  'become': 'bɪkʌm',
+  'becomes': 'bɪkʌmz',
+  'became': 'bɪkeɪm',
+  'becoming': 'bɪkʌmɪŋ',
+  'leave': 'liːv',
+  'leaves': 'liːvz',
+  'left': 'lɛft',
+  'leaving': 'liːvɪŋ',
+  'put': 'pʊt',
+  'puts': 'pʊts',
+  'putting': 'pʊtɪŋ',
+  'mean': 'miːn',
+  'means': 'miːnz',
+  'meant': 'mɛnt',
+  'meaning': 'miːnɪŋ',
+  'keep': 'kiːp',
+  'keeps': 'kiːps',
+  'kept': 'kɛpt',
+  'keeping': 'kiːpɪŋ',
+  'let': 'lɛt',
+  'lets': 'lɛts',
+  'letting': 'lɛtɪŋ',
+  'begin': 'bɪɡɪn',
+  'begins': 'bɪɡɪnz',
+  'began': 'bɪɡæn',
+  'begun': 'bɪɡʌn',
+  'beginning': 'bɪɡɪnɪŋ',
+  'seem': 'siːm',
+  'seems': 'siːmz',
+  'seemed': 'siːmd',
+  'seeming': 'siːmɪŋ',
+  'help': 'hɛlp',
+  'helps': 'hɛlps',
+  'helped': 'hɛlpt',
+  'helping': 'hɛlpɪŋ',
+  'show': 'ʃoʊ',
+  'shows': 'ʃoʊz',
+  'showed': 'ʃoʊd',
+  'shown': 'ʃoʊn',
+  'showing': 'ʃoʊɪŋ',
+  'hear': 'hɪɹ',
+  'hears': 'hɪɹz',
+  'heard': 'hɜːɹd',
+  'hearing': 'hɪɹɪŋ',
+  'play': 'pleɪ',
+  'plays': 'pleɪz',
+  'played': 'pleɪd',
+  'playing': 'pleɪɪŋ',
+  'run': 'ɹʌn',
+  'runs': 'ɹʌnz',
+  'ran': 'ɹæn',
+  'running': 'ɹʌnɪŋ',
+  'move': 'muːv',
+  'moves': 'muːvz',
+  'moved': 'muːvd',
+  'moving': 'muːvɪŋ',
+  'live': 'lɪv',
+  'lives': 'lɪvz',
+  'lived': 'lɪvd',
+  'living': 'lɪvɪŋ',
+  'believe': 'bɪliːv',
+  'believes': 'bɪliːvz',
+  'believed': 'bɪliːvd',
+  'believing': 'bɪliːvɪŋ',
+
+  // Prepositions
+  'to': 'tuː',
+  'of': 'ʌv',
+  'in': 'ɪn',
+  'for': 'fɔːɹ',
+  'on': 'ɑːn',
+  'with': 'wɪð',
+  'at': 'æt',
+  'by': 'baɪ',
+  'from': 'fɹʌm',
+  'up': 'ʌp',
+  'about': 'əbaʊt',
+  'into': 'ɪntuː',
+  'over': 'oʊvɚ',
+  'after': 'æftɚ',
+  'beneath': 'bɪniːθ',
+  'under': 'ʌndɚ',
+  'above': 'əbʌv',
+
+  // Conjunctions
+  'and': 'ænd',
+  'or': 'ɔːɹ',
+  'but': 'bʌt',
+  'if': 'ɪf',
+  'because': 'bɪkɔːz',
+  'as': 'æz',
+  'until': 'ʌntɪl',
+  'while': 'waɪl',
+  'although': 'ɔːlðoʊ',
+  'though': 'ðoʊ',
+  'since': 'sɪns',
+  'unless': 'ənlɛs',
+  'than': 'ðæn',
+  'so': 'soʊ',
+  'then': 'ðɛn',
+
+  // Adjectives
+  'good': 'ɡʊd',
+  'new': 'nuː',
+  'first': 'fɜːɹst',
+  'last': 'læst',
+  'long': 'lɔːŋ',
+  'great': 'ɡɹeɪt',
+  'little': 'lɪtəl',
+  'own': 'oʊn',
+  'old': 'oʊld',
+  'right': 'ɹaɪt',
+  'big': 'bɪɡ',
+  'high': 'haɪ',
+  'different': 'dɪfɹənt',
+  'small': 'smɔːl',
+  'large': 'lɑːɹdʒ',
+  'next': 'nɛkst',
+  'early': 'ɜːɹli',
+  'young': 'jʌŋ',
+  'important': 'ɪmpɔːɹtənt',
+  'public': 'pʌblɪk',
+  'bad': 'bæd',
+  'same': 'seɪm',
+  'able': 'eɪbəl',
+
+  // Adverbs
+  'not': 'nɑːt',
+  'very': 'vɛɹi',
+  'also': 'ɔːlsoʊ',
+  'just': 'dʒʌst',
+  'only': 'oʊnli',
+  'now': 'naʊ',
+  'here': 'hɪɹ',
+  'there': 'ðɛɹ',
+  'today': 'tədeɪ',
+  'well': 'wɛl',
+  'back': 'bæk',
+  'even': 'iːvən',
+  'still': 'stɪl',
+  'never': 'nɛvɚ',
+  'always': 'ɔːlweɪz',
+  'often': 'ɔːfən',
+  'again': 'əɡɛn',
+  'really': 'ɹɪli',
+  'already': 'ɔːlɹɛdi',
+  'maybe': 'meɪbi',
+  'perhaps': 'pɚhæps',
+  'yes': 'jɛs',
+  'yet': 'jɛt',
+  'too': 'tuː',
+
+  // Nouns - common
+  'time': 'taɪm',
+  'year': 'jɪɹ',
+  'people': 'piːpəl',
+  'way': 'weɪ',
+  'day': 'deɪ',
+  'man': 'mæn',
+  'woman': 'wʊmən',
+  'child': 'tʃaɪld',
+  'children': 'tʃɪldɹən',
+  'world': 'wɜːɹld',
+  'life': 'laɪf',
+  'hand': 'hænd',
+  'part': 'pɑːɹt',
+  'place': 'pleɪs',
+  'case': 'keɪs',
+  'week': 'wiːk',
+  'company': 'kʌmpəni',
+  'system': 'sɪstəm',
+  'program': 'pɹoʊɡɹæm',
+  'question': 'kwɛstʃən',
+  'work': 'wɜːɹk',
+  'government': 'ɡʌvɚnmənt',
+  'number': 'nʌmbɚ',
+  'night': 'naɪt',
+  'point': 'pɔɪnt',
+  'home': 'hoʊm',
+  'water': 'wɔːtɚ',
+  'room': 'ɹuːm',
+  'mother': 'mʌðɚ',
+  'area': 'ɛɹiə',
+  'money': 'mʌni',
+  'story': 'stɔːɹi',
+  'fact': 'fækt',
+  'month': 'mʌnθ',
+  'lot': 'lɑːt',
+  'study': 'stʌdi',
+  'book': 'bʊk',
+  'eye': 'aɪ',
+  'job': 'dʒɑːb',
+  'word': 'wɜːɹd',
+  'business': 'bɪznəs',
+  'issue': 'ɪʃuː',
+  'side': 'saɪd',
+  'kind': 'kaɪnd',
+  'head': 'hɛd',
+  'house': 'haʊs',
+  'service': 'sɜːɹvɪs',
+  'friend': 'fɹɛnd',
+  'father': 'fɑːðɚ',
+  'power': 'paʊɚ',
+  'hour': 'aʊɚ',
+  'game': 'ɡeɪm',
+  'line': 'laɪn',
+  'end': 'ɛnd',
+  'member': 'mɛmbɚ',
+  'law': 'lɔː',
+  'car': 'kɑːɹ',
+  'city': 'sɪti',
+  'community': 'kəmjuːnɪti',
+  'name': 'neɪm',
+  'president': 'pɹɛzɪdənt',
+  'team': 'tiːm',
+  'minute': 'mɪnɪt',
+  'idea': 'aɪdiə',
+  'body': 'bɑːdi',
+  'information': 'ɪnfɚmeɪʃən',
+  'thing': 'θɪŋ',
+  'things': 'θɪŋz',
+
+  // Greetings & expressions
+  'hello': 'həloʊ',
   'hi': 'haɪ',
   'hey': 'heɪ',
-  'yes': 'jes',
-  'no': 'noʊ',
+  'goodbye': 'ɡʊdbaɪ',
+  'bye': 'baɪ',
   'please': 'pliːz',
   'thank': 'θæŋk',
   'thanks': 'θæŋks',
-  'sorry': 'sɒɹi',
-  'okay': 'oʊˈkeɪ',
-  'ok': 'oʊˈkeɪ',
-  'test': 'test',
-  'text': 'tekst',
+  'sorry': 'sɑːɹi',
+  'okay': 'oʊkeɪ',
+  'ok': 'oʊkeɪ',
+  'welcome': 'wɛlkəm',
+
+  // Tech words
+  'test': 'tɛst',
+  'testing': 'tɛstɪŋ',
+  'text': 'tɛkst',
   'speech': 'spiːtʃ',
   'browser': 'bɹaʊzɚ',
-  'running': 'ɹʌnɪŋ',
+  'computer': 'kəmpjuːtɚ',
+  'software': 'sɔːftwɛɹ',
+  'internet': 'ɪntɚnɛt',
+  'website': 'wɛbsaɪt',
+  'application': 'æplɪkeɪʃən',
+  'technology': 'tɛknɑːlədʒi',
+  'data': 'deɪtə',
+  'file': 'faɪl',
+  'audio': 'ɔːdioʊ',
+  'video': 'vɪdioʊ',
+  'model': 'mɑːdəl',
   'piper': 'paɪpɚ',
-  'system': 'sɪstəm',
+};
+
+// Fallback letter-to-phoneme rules for unknown words
+const LETTER_RULES = {
+  'a': 'æ',
+  'b': 'b',
+  'c': 'k',
+  'd': 'd',
+  'e': 'ɛ',
+  'f': 'f',
+  'g': 'ɡ',
+  'h': 'h',
+  'i': 'ɪ',
+  'j': 'dʒ',
+  'k': 'k',
+  'l': 'l',
+  'm': 'm',
+  'n': 'n',
+  'o': 'ɑː',
+  'p': 'p',
+  'q': 'k',
+  'r': 'ɹ',
+  's': 's',
+  't': 't',
+  'u': 'ʌ',
+  'v': 'v',
+  'w': 'w',
+  'x': 'ks',
+  'y': 'i',
+  'z': 'z',
+};
+
+// Digraph rules
+const DIGRAPH_RULES = {
+  'th': 'θ',
+  'sh': 'ʃ',
+  'ch': 'tʃ',
+  'ph': 'f',
+  'wh': 'w',
+  'ng': 'ŋ',
+  'ck': 'k',
+  'gh': '',
+  'kn': 'n',
+  'wr': 'ɹ',
+  'ee': 'iː',
+  'ea': 'iː',
+  'oo': 'uː',
+  'ou': 'aʊ',
+  'ow': 'oʊ',
+  'ai': 'eɪ',
+  'ay': 'eɪ',
+  'oi': 'ɔɪ',
+  'oy': 'ɔɪ',
+  'er': 'ɚ',
+  'ir': 'ɜːɹ',
+  'ur': 'ɜːɹ',
+  'ar': 'ɑːɹ',
+  'or': 'ɔːɹ',
 };
 
 /**
- * Simple letter-to-phoneme fallback mapping
+ * Initialize phonemizer (no-op, kept for compatibility)
  */
-const LETTER_PHONEMES = {
-  'a': 'æ', 'b': 'b', 'c': 'k', 'd': 'd', 'e': 'ɛ', 'f': 'f', 'g': 'ɡ', 'h': 'h',
-  'i': 'ɪ', 'j': 'dʒ', 'k': 'k', 'l': 'l', 'm': 'm', 'n': 'n', 'o': 'ɒ', 'p': 'p',
-  'q': 'k', 'r': 'ɹ', 's': 's', 't': 't', 'u': 'ʌ', 'v': 'v', 'w': 'w', 'x': 'ks',
-  'y': 'j', 'z': 'z',
-};
+export async function initPhonemizerData() {
+  // No initialization needed for rule-based phonemizer
+}
+
+/**
+ * Convert a single word to phonemes
+ */
+function wordToPhonemes(word) {
+  word = word.toLowerCase();
+
+  // Check dictionary first
+  if (LEXICON[word]) {
+    return LEXICON[word];
+  }
+
+  // Apply rules for unknown words
+  let phonemes = '';
+  let i = 0;
+
+  while (i < word.length) {
+    // Check for digraphs first
+    if (i < word.length - 1) {
+      const digraph = word.slice(i, i + 2);
+      if (DIGRAPH_RULES[digraph] !== undefined) {
+        phonemes += DIGRAPH_RULES[digraph];
+        i += 2;
+        continue;
+      }
+    }
+
+    // Single letter
+    const letter = word[i];
+    if (LETTER_RULES[letter]) {
+      phonemes += LETTER_RULES[letter];
+    }
+    i++;
+  }
+
+  return phonemes;
+}
 
 /**
  * Convert text to phoneme string
@@ -133,64 +554,52 @@ function textToPhonemes(text) {
   // Normalize text
   text = text.toLowerCase().trim();
 
-  // Split into words and punctuation
+  // Tokenize: split into words and punctuation
   const tokens = text.match(/[\w']+|[.,!?;:]/g) || [];
 
-  const phonemes = [];
+  const phonemeWords = [];
+
   for (const token of tokens) {
-    // Check if it's punctuation
+    // Handle punctuation
     if (/^[.,!?;:]$/.test(token)) {
-      phonemes.push(token);
+      phonemeWords.push(token);
       continue;
     }
 
-    // Try dictionary lookup first
-    if (G2P_RULES[token]) {
-      phonemes.push(G2P_RULES[token]);
-    } else {
-      // Fallback: convert each letter
-      let wordPhonemes = '';
-      for (const char of token) {
-        if (LETTER_PHONEMES[char]) {
-          wordPhonemes += LETTER_PHONEMES[char];
-        }
-      }
-      if (wordPhonemes) {
-        phonemes.push(wordPhonemes);
-      }
+    // Convert word to phonemes
+    const phonemes = wordToPhonemes(token);
+    if (phonemes) {
+      phonemeWords.push(phonemes);
     }
   }
 
-  return phonemes.join(' ');
+  // Join with spaces
+  return phonemeWords.join(' ');
 }
 
 /**
  * Convert phoneme string to IDs using model config
  */
 function phonemesToIds(phonemeString, config) {
-  // Use model's phoneme_id_map if available
-  const idMap = config?.phoneme_id_map || PHONEME_ID_MAP;
-
+  const idMap = config?.phoneme_id_map || {};
   const ids = [];
 
-  // Add BOS token
-  if (idMap[BOS] !== undefined) {
-    ids.push(idMap[BOS]);
+  // Add BOS (beginning of sequence) token
+  if (idMap['^']) {
+    ids.push(idMap['^'][0]);
   }
 
   // Convert each phoneme character
   for (const char of phonemeString) {
-    if (idMap[char] !== undefined) {
-      ids.push(idMap[char]);
-    } else if (char === ' ' && idMap[' '] !== undefined) {
-      ids.push(idMap[' ']);
+    if (idMap[char]) {
+      ids.push(idMap[char][0]);
     }
-    // Skip unknown characters
+    // Skip unknown characters silently
   }
 
-  // Add EOS token
-  if (idMap[EOS] !== undefined) {
-    ids.push(idMap[EOS]);
+  // Add EOS (end of sequence) token
+  if (idMap['$']) {
+    ids.push(idMap['$'][0]);
   }
 
   return ids;
@@ -204,6 +613,9 @@ function phonemesToIds(phonemeString, config) {
  */
 export function textToPhonemeIds(text, config) {
   const phonemeString = textToPhonemes(text);
+  console.log('Input text:', text);
   console.log('Phonemes:', phonemeString);
-  return phonemesToIds(phonemeString, config);
+  const ids = phonemesToIds(phonemeString, config);
+  console.log('Phoneme IDs:', ids);
+  return ids;
 }
